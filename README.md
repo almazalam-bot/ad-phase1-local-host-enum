@@ -10,31 +10,46 @@ This reference covers three sub-phases:
 2. **Credential Harvesting on Host** — LSASS protections and dumping, SAM/SYSTEM hive extraction, DPAPI secrets, browser/Credential Manager/Wi-Fi/saved-session credentials
 3. **Local Privilege Escalation** — automated enumeration (winPEAS/Seatbelt/PowerUp), token privilege abuse, PATH/service/registry misconfigurations, kernel exploit applicability
 
-## Shell tags
+## Repository structure
 
-Every command in `Phase1_Commands_Scripts.docx` is tagged so there's no ambiguity about where to run it:
+```
+.
+├── Phase1_Commands.md              # full command reference, renders on GitHub
+├── docs/
+│   └── Phase1_Commands_Scripts.docx  # same content as a Word doc
+└── scripts/
+    ├── powershell/
+    │   ├── 1.1_system_config.ps1
+    │   ├── 1.2_credential_harvesting.ps1
+    │   └── 1.3_local_privesc.ps1
+    └── cmd/
+        ├── 1.1_system_config.cmd
+        ├── 1.2_credential_harvesting.cmd
+        └── 1.3_local_privesc.cmd
+```
+
+Each phase has **two scripts** — one for native commands (`.cmd`, runs in cmd.exe or PowerShell) and one for PowerShell-only commands (`.ps1`). Run both to cover the full check.
+
+## Shell tags (in Phase1_Commands.md)
 
 | Tag | Meaning |
 |---|---|
 | 🟩 **CMD or POWERSHELL** | Native command/binary — runs identically in `cmd.exe` and PowerShell |
-| 🟦 **POWERSHELL ONLY** | Cmdlet or PS-only syntax (`Get-*`, `$env:`, `[Type]::Method`) — fails in plain `cmd.exe` |
+| 🟦 **POWERSHELL ONLY** | Cmdlet or PS-only syntax — fails in plain `cmd.exe` |
 | 🟫 **OFFLINE / ATTACKER MACHINE** | Not run on the target — run against exfiltrated files/hashes on your own box |
 
-If you're dropped into `cmd.exe` and need a PowerShell-only command:
-
-## Contents
-
-- `Phase1_Commands_Scripts.docx` — full tagged command reference
-- `Phase1_Test_Cases.md` *(add if/when generated)* — pass/fail test case table with risk ratings for reporting
+If in `cmd.exe` and a PowerShell-only script is needed:
+```
+powershell -ep bypass -File .\1.1_system_config.ps1
+```
 
 ## Usage
 
-Each command block maps to a corresponding checklist item and test case. Intended workflow:
-
-1. Run automated sweep (winPEAS / Seatbelt) for a broad first pass
-2. Manually verify flagged items using the targeted commands
-3. Record result (secure / finding), evidence, and risk rating against the test case table
-4. Carry confirmed findings into the engagement report, mapped to MITRE ATT&CK
+1. Transfer the relevant `.ps1`/`.cmd` script to the target host (or paste commands manually per the RoE's tooling constraints)
+2. Run automated sweep tools (winPEAS/Seatbelt) first for a broad first pass
+3. Run the phase scripts for targeted/manual verification
+4. Record results, evidence, and risk rating against your test case tracker
+5. Carry confirmed findings into the engagement report, mapped to MITRE ATT&CK
 
 ## ⚠️ Scope & Authorization
 
@@ -44,4 +59,4 @@ This repository does not contain any client-identifying information, target host
 
 ## License
 
-No license granted. This content is for personal/professional reference in authorized engagements — not licensed for redistribution or reuse.
+No license granted. For personal/professional reference in authorized engagements only — not licensed for redistribution or reuse.
