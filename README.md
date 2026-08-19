@@ -1,22 +1,23 @@
-# AD Phase 1 — Local Host Enumeration
+# AD Red Team Engagement — Command & Script Reference
 
-Command and script reference for **Phase 1** of an internal Active Directory red team engagement: local host enumeration following an initial domain-joined foothold, prior to lateral movement or domain-level attacks.
+Command and script reference for an internal Active Directory red team engagement, starting from an initial domain-joined foothold.
 
-## Scope
+## Phases covered
 
-This reference covers three sub-phases:
-
-1. **System & Configuration** — OS/patch level, local admin/service accounts, scheduled tasks, AV/EDR fingerprinting, LAPS, AppLocker/WDAC, sensitive file discovery
-2. **Credential Harvesting on Host** — LSASS protections and dumping, SAM/SYSTEM hive extraction, DPAPI secrets, browser/Credential Manager/Wi-Fi/saved-session credentials
-3. **Local Privilege Escalation** — automated enumeration (winPEAS/Seatbelt/PowerUp), token privilege abuse, PATH/service/registry misconfigurations, kernel exploit applicability
+| Phase | Folder / File | Access assumed |
+|---|---|---|
+| **Phase 1** — Local Host Enumeration | `Phase1_Commands.md`, `scripts/powershell/1.*`, `scripts/cmd/1.*` | PowerShell + cmd.exe |
+| **Phase 2** — Network & Host Discovery | `Phase2_Commands.md`, `scripts/cmd/2_network_discovery.cmd` | **cmd.exe only** — no PowerShell, no pre-existing pivot tooling |
 
 ## Repository structure
 
 ```
 .
-├── Phase1_Commands.md              # full command reference, renders on GitHub
+├── Phase1_Commands.md
+├── Phase2_Commands.md
 ├── docs/
-│   └── Phase1_Commands_Scripts.docx  # same content as a Word doc
+│   ├── Phase1_Commands_Scripts.docx
+│   └── Phase2_Commands_Scripts.docx
 └── scripts/
     ├── powershell/
     │   ├── 1.1_system_config.ps1
@@ -25,31 +26,40 @@ This reference covers three sub-phases:
     └── cmd/
         ├── 1.1_system_config.cmd
         ├── 1.2_credential_harvesting.cmd
-        └── 1.3_local_privesc.cmd
+        ├── 1.3_local_privesc.cmd
+        └── 2_network_discovery.cmd
 ```
 
-Each phase has **two scripts** — one for native commands (`.cmd`, runs in cmd.exe or PowerShell) and one for PowerShell-only commands (`.ps1`). Run both to cover the full check.
+## Shell / capability tags
 
-## Shell tags (in Phase1_Commands.md)
+**Phase 1** (`Phase1_Commands.md`):
 
 | Tag | Meaning |
 |---|---|
-| 🟩 **CMD or POWERSHELL** | Native command/binary — runs identically in `cmd.exe` and PowerShell |
-| 🟦 **POWERSHELL ONLY** | Cmdlet or PS-only syntax — fails in plain `cmd.exe` |
-| 🟫 **OFFLINE / ATTACKER MACHINE** | Not run on the target — run against exfiltrated files/hashes on your own box |
+| 🟩 CMD or POWERSHELL | Native command — runs identically in cmd.exe and PowerShell |
+| 🟦 POWERSHELL ONLY | Cmdlet/PS-only syntax — fails in plain cmd.exe |
+| 🟫 OFFLINE / ATTACKER MACHINE | Run on your own box against exfiltrated files/hashes |
 
-If in `cmd.exe` and a PowerShell-only script is needed:
-```
-powershell -ep bypass -File .\1.1_system_config.ps1
-```
+**Phase 2** (`Phase2_Commands.md`) — written for cmd.exe-only access:
+
+| Tag | Meaning |
+|---|---|
+| 🟩 NATIVE CMD | Built into Windows — zero extra tools |
+| 🟨 EXTERNAL BINARY REQUIRED | Needs a file transferred onto the target host |
+| 🟥 REQUIRES ADMIN / CHANGES HOST STATE | Local admin needed and/or alters host config |
+| ⬛ LIMITATION | Not achievable from cmd.exe alone — gap noted explicitly |
 
 ## Usage
 
-1. Transfer the relevant `.ps1`/`.cmd` script to the target host (or paste commands manually per the RoE's tooling constraints)
-2. Run automated sweep tools (winPEAS/Seatbelt) first for a broad first pass
-3. Run the phase scripts for targeted/manual verification
-4. Record results, evidence, and risk rating against your test case tracker
-5. Carry confirmed findings into the engagement report, mapped to MITRE ATT&CK
+1. Run automated sweep tools first where available (winPEAS/Seatbelt for Phase 1)
+2. Run the phase scripts for targeted/manual verification
+3. Record results, evidence, and risk rating against your test case tracker
+4. Carry confirmed findings into the engagement report, mapped to MITRE ATT&CK
+
+From cmd.exe, drop into PowerShell if available:
+```
+powershell -ep bypass -File .\1.1_system_config.ps1
+```
 
 ## ⚠️ Scope & Authorization
 
