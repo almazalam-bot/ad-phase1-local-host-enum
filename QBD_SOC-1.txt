@@ -1,0 +1,87 @@
+# QDB SOC - File Encryption Test
+$TestDir = "$env:TEMP\QDB-Encryption-Test"
+New-Item -ItemType Directory -Path $TestDir -Force | Out-Null
+
+# Create 5 dummy files
+1..5 | ForEach-Object {
+    "QDB-SOC-ENCRYPTION-TEST-FILE-$($_)" |
+        Set-Content "$TestDir\TestFile$_.txt"
+}
+
+# Generate AES key
+$key = [System.Security.Cryptography.Aes]::Create()
+$key.GenerateKey()
+$key.GenerateIV()
+
+# Save key for test cleanup/decryption
+[Convert]::ToBase64String($key.Key) | Set-Content "$TestDir\test.key"
+[Convert]::ToBase64String($key.IV)  | Set-Content "$TestDir\test.iv"
+
+# Encrypt the 5 files
+1..5 | ForEach-Object {
+    $inputFile  = "$TestDir\TestFile$_.txt"
+    $outputFile = "$TestDir\TestFile$_.txt.enc"
+
+    $data = [IO.File]::ReadAllBytes($inputFile)
+
+    $aes = [System.Security.Cryptography.Aes]::Create()
+    $aes.Key = $key.Key
+    $aes.IV  = $key.IV
+
+    $encrypted = $aes.CreateEncryptor().TransformFinalBlock($data, 0, $data.Length)
+    [IO.File]::WriteAllBytes($outputFile, $encrypted)
+
+    $aes.Dispose()
+
+    Write-Host "Encrypted: TestFile$_.txt"
+}
+
+$key.Dispose()
+
+Write-Host ""
+Write-Host "QDB encryption test completed."
+Write-Host "Test files are located at: $TestDir"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+------------------------------------------------------------------------------------------------------------------------------------------
+# QDB - Safe Keylogger Detection Simulation
+Write-Host "QDB KEYLOGGER TEST STARTED"
+
+# Simulate keyboard-input API activity
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+
+public class KeyboardTest {
+    [DllImport("user32.dll")]
+    public static extern short GetAsyncKeyState(int vKey);
+}
+"@
+
+Write-Host "Simulating keyboard monitoring for 30 seconds..."
+
+$end = (Get-Date).AddSeconds(30)
+
+while ((Get-Date) -lt $end) {
+    foreach ($key in 65..90) {
+        [KeyboardTest]::GetAsyncKeyState($key) | Out-Null
+    }
+    Start-Sleep -Milliseconds 100
+}
+
+Write-Host "QDB KEYLOGGER TEST COMPLETED"
