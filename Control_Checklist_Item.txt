@@ -1,0 +1,81 @@
+Firmware Version Verification
+Firmware Update Process
+System Logs Review
+Hardware Documentation
+Configuration Backup
+IP Address Configuration
+DNS Configuration
+DHCP Pool Configuration
+WAN Connectivity
+MTU Size Configuration
+Encryption Standard
+WiFi Password Complexity
+Pre-Shared Key (PSK)
+802.1X Configuration
+Guest WiFi Encryption
+SSID Name Documentation
+SSID Broadcast
+Hidden SSIDs
+SSID Isolation
+SSID Count
+2.4GHz Band Configuration
+5GHz Band Configuration
+6GHz Band (if available)
+Channel Width Settings
+Automatic Channel Selection
+Interference Assessment
+Default Admin Credentials
+Admin Password Complexity
+Account Lockout Policy
+Multiple Admin Accounts
+SSH vs Telnet
+HTTPS Configuration
+SSH Encryption
+Console Access
+Remote Management
+Management Port Security
+MAC Filtering Policy
+MAC Whitelist Accuracy
+MAC Address Updates
+Rogue Device Detection
+Firewall Status
+Firewall Mode
+Inbound Rules
+Outbound Rules
+DDoS Protection
+Port Forwarding
+UPnP Status
+DMZ Configuration
+VLAN Implementation
+VLAN Configuration
+VLAN Isolation
+Guest Network VLAN
+QoS Configuration
+Bandwidth Allocation
+Traffic Prioritization
+QoS Testing
+System Logging
+Log Retention
+Syslog Server
+SNMP Configuration
+SNMP Access Control
+Event Notifications
+Band Steering
+Airtime Fairness
+Beamforming
+Management Frame Protection
+Fast Roaming
+Device Placement
+Physical Inspection
+Cooling & Ventilation
+Power Supply
+Antenna Configuration
+Configuration Backup
+Backup Freshness
+Backup Storage
+Restore Testing
+Backup Encryption
+Policy Compliance
+Industry Standards
+WiFi Standards
+Regulatory Requirements

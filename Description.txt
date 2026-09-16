@@ -1,0 +1,81 @@
+Check if device is running latest stable firmware version with security patches
+Verify automated or scheduled firmware updates are enabled
+Review system logs for errors, warnings, or security events
+Verify hardware version, serial number, and specifications are documented
+Confirm backup of running configuration exists and is current
+Verify correct IP address, subnet mask, and gateway settings
+Verify primary and secondary DNS servers are configured correctly
+Verify DHCP scope range, lease duration, and excluded addresses
+Verify internet connectivity and WAN link speed/duplex settings
+Confirm MTU size is appropriate (typically 1500 for Ethernet)
+Verify WPA3 (preferred) or WPA2-AES is enabled, NOT WEP/WPA
+Verify WiFi password has minimum 15 characters with mixed case/numbers/symbols
+Confirm PSK password is NOT default factory password
+If Enterprise mode used, verify 802.1X RADIUS server is properly configured
+Verify guest SSID uses same encryption standard as main network
+Verify SSID name is documented and appropriate for organization
+Confirm SSID broadcast is enabled (hiding SSID provides minimal security)
+Verify no additional hidden SSIDs exist that could indicate rogue networks
+Confirm guest SSID has client-to-client communication disabled
+Verify number of active SSIDs aligns with organizational requirements
+Verify 2.4GHz band settings (channel, width, transmit power)
+Verify 5GHz band is enabled with proper channel selection
+Verify 6GHz band is properly configured if supported by device
+Verify appropriate channel width (20MHz minimum for interference prevention)
+Confirm automatic channel selection is enabled to avoid interference
+Verify signal strength and interference levels are acceptable
+Verify default username/password have been changed
+Confirm admin password has 15+ characters with uppercase/numbers/symbols
+Verify account lockout after failed login attempts is enabled
+Review and document all admin accounts; remove unnecessary ones
+Verify SSH is enabled and Telnet is disabled for remote management
+Confirm HTTP access is disabled; only HTTPS management access allowed
+Verify SSH uses SSH-2 and strong encryption (AES-256 preferred)
+Verify physical console port is secured or disabled if not required
+Verify remote management is disabled if not required for operations
+Confirm management access is restricted to authorized IPs only
+Determine if MAC filtering is required and documented
+If enabled, verify MAC whitelist is current and accurate
+Confirm process exists for adding/removing MAC addresses
+Verify monitoring for unauthorized MAC addresses
+Confirm firewall is enabled on all interfaces
+Verify firewall mode is set to appropriate level (Standard/Advanced)
+Review inbound firewall rules; ensure only necessary ports are open
+Verify outbound filtering is configured to prevent data exfiltration
+Confirm DDoS protection/anti-DoS features are enabled
+Review port forwarding rules; eliminate unnecessary exposures
+Verify UPnP is disabled if not required
+If DMZ exists, verify it's properly configured and monitored
+Confirm VLANs are implemented if required by policy
+Verify VLAN IDs, names, and assignments are documented
+Confirm VLANs are properly isolated; traffic doesn't cross boundaries
+Verify guest network is on separate VLAN with restricted access
+Confirm QoS policies are configured if bandwidth management required
+Verify bandwidth is appropriately allocated to critical services
+Confirm high-priority traffic gets appropriate QoS treatment
+Verify QoS functionality under load is effective
+Confirm system logging is enabled and active
+Verify logs are retained for minimum 90 days or per policy
+If configured, verify syslog server is properly configured and reachable
+If SNMP enabled, verify community strings are not default
+Verify SNMP access is restricted to authorized management IPs
+Confirm critical event alerts/notifications are configured
+Confirm band steering (802.11k) is enabled if available
+Verify airtime fairness is enabled to prevent slow devices impact
+Confirm beamforming (802.11ac/ax) is enabled for better range
+Verify 802.11w (MFP) is enabled to protect management frames
+Confirm 802.11r (Fast Roaming) is enabled if required
+Verify device is placed in secure, accessible location
+Check for signs of physical tampering or damage
+Verify adequate ventilation to prevent overheating
+Confirm device has stable power; verify UPS if required
+Verify antennas are properly aligned and positioned
+Confirm backup of running and startup configs exists
+Verify backup is current (within 24-48 hours)
+Confirm backup is stored securely, offsite or redundantly
+Verify backup restoration process is tested and documented
+Confirm backup is encrypted if stored remotely
+Verify device configuration complies with organizational policies
+Confirm compliance with applicable industry standards (HIPAA, PCI-DSS, etc.)
+Verify device supports current WiFi standards (802.11ax/6E if applicable)
+Confirm FCC compliance and regional requirements are met
